@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { FormattedValue } from './FormattedValue';
-import { MM_TO_PX, Units } from './constants';
+import { MM_TO_PX, Units } from '../constants';
 
 interface SliderControlProps {
   label: string;
