@@ -33,7 +33,8 @@ const SpeakerGrille = () => {
   const [divergenceAngle, setDivergenceAngle] = useState(137.5);
   // const [numPoints, setNumPoints] = useState(2000);
   const [spacingFactor, setSpacingFactor] = useState(0);
-  
+  const [spacingScaling, setSpacingScaling] = useState(0);
+
   const [pattern, setPattern] = useState<PatternType>('phyllotaxis');
   const [minClearance, setMinClearance] = useState(DEFAULT_VALUES_PX.minClearance);
   const [centerExclusion, setCenterExclusion] = useState(DEFAULT_VALUES_PX.centerExclusion);
@@ -59,15 +60,48 @@ const SpeakerGrille = () => {
       : Math.exp(sizeScaling * (1 - 2 * distance)));
   };
 
+  const getSpacing = (x: number, y: number, baseSpacing: number) => {
+    if (spacingScaling === 0) return baseSpacing;
+    
+    // Calculate distance from center (0 to 1)
+    const distance = Math.sqrt(x * x + y * y) / radius;
+    
+    // When distance = 0 (center), apply full scaling
+    // When distance = 1 (edge), return baseSpacing
+    // Linear interpolation between the two
+    if (scaleType === 'linear') {
+      const centerSpacing = baseSpacing * (1 + spacingScaling);
+      return baseSpacing + (centerSpacing - baseSpacing) * (1 - distance);
+    } else {
+      // For exponential, scale the center spacing but maintain smooth transition to edge
+      const centerSpacing = baseSpacing * Math.exp(spacingScaling);
+      return baseSpacing + (centerSpacing - baseSpacing) * (1 - distance);
+    }
+  };
+
   const patternPoints = useMemo(() => {
     console.log('Generating pattern points...');
 
-    // Calculate the actual spacing based on spacingFactor and holeRadius
-    const spacing = (holeRadius) * (1.5 + spacingFactor);
+    // Calculate the base spacing based on spacingFactor and holeRadius
+    const baseSpacing = (holeRadius) * (1.5 + spacingFactor);
 
-    console.log(`Spacing: ${spacing}`)
-    // Calculate the number of points based on the overall radius
-    const numPoints = Math.round((radius * radius) / (spacing * spacing));
+    // Calculate the maximum possible spacing based on the scaling
+    const maxSpacingMultiplier = spacingScaling > 0 
+      ? (scaleType === 'linear' 
+        ? 1 + spacingScaling  // At edges, distance = 1, so 1 + scaling
+        : Math.exp(spacingScaling))
+      : 1;  // When scaling is negative, base spacing is the maximum
+
+    // Calculate points using the maximum possible spacing to ensure coverage
+    const maxSpacing = baseSpacing * maxSpacingMultiplier;
+    const numPoints = Math.round((radius * radius) / (baseSpacing * baseSpacing) * (maxSpacingMultiplier * maxSpacingMultiplier));
+    
+    console.log('Point calculation:', {
+      baseSpacing,
+      maxSpacingMultiplier,
+      maxSpacing,
+      numPoints
+    });
     
     // Create base configuration
     const baseConfig: BasePatternConfig = {
@@ -75,7 +109,8 @@ const SpeakerGrille = () => {
       holeRadius,
       minClearance,
       centerExclusion,
-      centerHole
+      centerHole,
+      getSpacing: (x: number, y: number) => getSpacing(x, y, baseSpacing)
     };
 
     // Get pattern-specific configuration
@@ -83,7 +118,7 @@ const SpeakerGrille = () => {
       pattern,
       baseConfig,
       divergenceAngle,
-      spacing,
+      baseSpacing,
       numPoints,
       concentricSpacing
     );
@@ -106,6 +141,8 @@ const SpeakerGrille = () => {
     holeRadius,
     divergenceAngle,
     spacingFactor,
+    spacingScaling,  // Add spacingScaling
+    scaleType,       // Add scaleType
     minClearance,
     concentricSpacing,
     centerExclusion,
@@ -156,19 +193,20 @@ const SpeakerGrille = () => {
 
   const randomize = () => {
     // Use suggested angles from PhyllotaxisPattern for better results
-    setDivergenceAngle(Math.random() * 360);
+    // setDivergenceAngle(Math.random() * 360);
     
     if (units === 'mm') {
       // Generate random values in mm and convert to px
       const randomMmSpacing = 1 + Math.random() * 29; // 1-30mm
-      const randomMmHoleRadius = 0.5 + Math.random() * 9.5; // 0.5-10mm
+      const randomMmHoleRadius = 2.5 + Math.random() * 9.5; // 0.5-10mm
       
-      setSpacing(randomMmSpacing * MM_TO_PX);
       setHoleRadius(randomMmHoleRadius * MM_TO_PX);
     } else {
-      setSpacingFactor(Math.random() * 2 - 1);
+      
       setHoleRadius(2 + Math.random() * 38); // 2-40px
     }
+
+    setSpacingFactor(Math.random() * 2 - 1);
     
     setSizeScaling(-1 + Math.random() * 2);
   };
@@ -183,6 +221,7 @@ const SpeakerGrille = () => {
     setDivergenceAngle(137.5);
     // setNumPoints(2000);
     setSizeScaling(0);
+    setSpacingScaling(0);
     setScaleType('linear');
     setUseStrokes(false);
     setCenterHole(false);
@@ -423,6 +462,21 @@ const SpeakerGrille = () => {
                 step={0.1}
                 value={spacingFactor}
                 onChange={(e) => setSpacingFactor(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium">
+                Spacing scaling (<FormattedValue value={spacingScaling} precision={2} />)
+              </label>
+              <input
+                type="range"
+                min={-1}
+                max={1}
+                step={0.1}
+                value={spacingScaling}
+                onChange={(e) => setSpacingScaling(Number(e.target.value))}
                 className="w-full"
               />
             </div>

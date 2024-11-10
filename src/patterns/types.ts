@@ -27,6 +27,8 @@ export interface BasePatternConfig {
 
   // Inner radius where pattern should start (used internally)
   innerRadius?: number;
+
+  getSpacing?: (x: number, y: number) => number;
 }
 
 /**
