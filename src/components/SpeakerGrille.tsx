@@ -66,16 +66,20 @@ const SpeakerGrille = () => {
     // Calculate distance from center (0 to 1)
     const distance = Math.sqrt(x * x + y * y) / radius;
     
-    // When distance = 0 (center), apply full scaling
-    // When distance = 1 (edge), return baseSpacing
-    // Linear interpolation between the two
+    // Double amplification for Fermat pattern
+    const amplifiedScaling = spacingScaling * (pattern === 'fermat' ? 4 : 2);
+    
+    // Ensure we properly return to baseSpacing at the edge
+    // by using a normalized distance that reaches exactly 1
+    const normalizedDistance = Math.min(distance, 1);
+    
     if (scaleType === 'linear') {
-      const centerSpacing = baseSpacing * (1 + spacingScaling);
-      return baseSpacing + (centerSpacing - baseSpacing) * (1 - distance);
+      // At distance = 0 (center): baseSpacing * (1 + amplifiedScaling)
+      // At distance = 1 (edge): baseSpacing
+      return baseSpacing * (1 + amplifiedScaling * (1 - normalizedDistance));
     } else {
-      // For exponential, scale the center spacing but maintain smooth transition to edge
-      const centerSpacing = baseSpacing * Math.exp(spacingScaling);
-      return baseSpacing + (centerSpacing - baseSpacing) * (1 - distance);
+      const scaleFactor = Math.exp(amplifiedScaling * (1 - normalizedDistance)) - 1;
+      return baseSpacing * (1 + scaleFactor);
     }
   };
 

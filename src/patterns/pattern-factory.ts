@@ -15,10 +15,8 @@ export function createPatternConfig(
   numPoints?: number,
   concentricSpacing?: number,
 ): SpiralPatternConfig | ConcentricPatternConfig {
-  // Calculate initial spacing and effective radius for patterns when center is excluded
   const effectiveConfig = {
     ...baseConfig,
-    // If there's a center exclusion, ensure it's respected in pattern generation
     innerRadius: baseConfig.centerExclusion || 0
   };
 
@@ -29,14 +27,19 @@ export function createPatternConfig(
         ConcentricPattern.getOptimalSpacing(baseConfig.holeRadius, baseConfig.minClearance)
     };
   } else {
+    // Calculate base number of points based on area and spacing
+    const baseNumPoints = Math.ceil(Math.PI * Math.pow(baseConfig.radius, 2) / 
+      (Math.pow(spacing || baseConfig.holeRadius * 2, 2)));
+    
+    // Adjust point count based on pattern type
+    const patternMultiplier = pattern === 'fermat' ? 6 : 1; // Reduced from 4 to 2.5
+    const adjustedNumPoints = Math.ceil(baseNumPoints * patternMultiplier);
+
     return {
       ...effectiveConfig,
       divergenceAngle: divergenceAngle || 137.5,
       spacing: spacing || baseConfig.holeRadius * 2,
-      // Adjust numPoints based on available area when there's center exclusion
-      numPoints: numPoints || (baseConfig.centerExclusion 
-        ? Math.floor(2000 * (1 - Math.pow(baseConfig.centerExclusion / baseConfig.radius, 2)))
-        : 2000)
+      numPoints: numPoints || adjustedNumPoints
     };
   }
 }
