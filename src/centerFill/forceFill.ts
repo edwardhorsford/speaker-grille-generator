@@ -21,6 +21,13 @@ export class ForceFillGenerator implements CenterFillGenerator {
 
     const baseSpacing = (holeRadius * 2) + minDistance;
 
+    console.log('Force Fill Configuration:', {
+      centerRadius,
+      holeRadius,
+      baseSpacing,
+      outerPoints: outerPoints.length,
+    });
+
     // Density calculation
     const pointArea = Math.PI * Math.pow(baseSpacing / 2, 2);
     const centerArea = Math.PI * centerRadius * centerRadius;
@@ -105,26 +112,37 @@ export class ForceFillGenerator implements CenterFillGenerator {
       }
     }
 
-    // Slightly larger allowed area
-    const maxRadius = centerRadius * 1.1;
+    // Maximum allowed radius with a small safety margin
+    const maxRadius = Math.min(
+      centerRadius + holeRadius,
+      centerRadius + baseSpacing * 0.45
+    );
 
     // Force simulation
     for (let iter = 0; iter < maxIterations; iter++) {
       let maxMove = 0;
+      let maxOverlap = 0;
       const forces: Point[] = points.map(() => ({ x: 0, y: 0 }));
 
       points.forEach((p1, i) => {
         if (centerHole && i === 0) return;
 
-        // Use consistent repulsion for all points
+        // Use consistent repulsion for all points with overlap checking
         const repulsePoint = (p2: Point) => {
           const dx = p1.x - p2.x;
           const dy = p1.y - p2.y;
           const distSq = dx * dx + dy * dy;
           
+          // Track any overlaps we find
+          if (distSq < baseSpacing * baseSpacing) {
+            maxOverlap = Math.max(maxOverlap, baseSpacing - Math.sqrt(distSq));
+          }
+          
           if (distSq < baseSpacing * baseSpacing * 4) {
             const dist = Math.sqrt(distSq);
-            const forceMagnitude = Math.pow(baseSpacing / dist, 2) * baseSpacing;
+            // Increase force magnitude when points are too close
+            const closenessFactor = dist < baseSpacing ? 2 : 1;
+            const forceMagnitude = Math.pow(baseSpacing / dist, 2) * baseSpacing * closenessFactor;
             forces[i].x += dx * forceMagnitude / dist;
             forces[i].y += dy * forceMagnitude / dist;
           }
@@ -137,7 +155,9 @@ export class ForceFillGenerator implements CenterFillGenerator {
         });
       });
 
-      const damping = 0.2 * Math.pow(0.95, iter);
+      // Adjust damping based on overlap
+      const baseDamping = 0.2 * Math.pow(0.95, iter);
+      const damping = maxOverlap > 0 ? baseDamping * 1.5 : baseDamping;
 
       points.forEach((p, i) => {
         if (centerHole && i === 0) return;
@@ -148,7 +168,7 @@ export class ForceFillGenerator implements CenterFillGenerator {
         let newX = p.x + moveX;
         let newY = p.y + moveY;
         
-        // Hard boundary enforcement
+        // Strict boundary enforcement
         const newDist = Math.sqrt(newX * newX + newY * newY);
         if (newDist > maxRadius) {
           const scale = maxRadius / newDist;
@@ -156,26 +176,32 @@ export class ForceFillGenerator implements CenterFillGenerator {
           newY *= scale;
         }
 
-        // Overlap checking
+        // More thorough overlap checking
         let canMove = true;
+        let minSpacing = Number.POSITIVE_INFINITY;
         
+        // Check against internal points
         for (let j = 0; j < points.length; j++) {
           if (i === j) continue;
           const dx = newX - points[j].x;
           const dy = newY - points[j].y;
           const distSq = dx * dx + dy * dy;
+          minSpacing = Math.min(minSpacing, Math.sqrt(distSq));
           if (distSq < gridSpacing * gridSpacing) {
             canMove = false;
             break;
           }
         }
         
+        // Check against outer points with strict spacing
         if (canMove) {
           for (const patternPoint of outerPoints) {
             const dx = newX - patternPoint.x;
             const dy = newY - patternPoint.y;
             const distSq = dx * dx + dy * dy;
-            if (distSq < baseSpacing * baseSpacing) {
+            minSpacing = Math.min(minSpacing, Math.sqrt(distSq));
+            // Slightly increase the minimum spacing requirement
+            if (distSq < baseSpacing * baseSpacing * 1.01) {
               canMove = false;
               break;
             }
@@ -189,7 +215,24 @@ export class ForceFillGenerator implements CenterFillGenerator {
         }
       });
 
-      if (maxMove < gridSpacing * 0.001) break;
+      if (maxMove < gridSpacing * 0.001 && maxOverlap < 0.001) break;
+    }
+
+    // Final overlap check
+    let finalOverlaps = 0;
+    points.forEach((p1) => {
+      outerPoints.forEach((p2) => {
+        const dx = p1.x - p2.x;
+        const dy = p1.y - p2.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < baseSpacing) {
+          finalOverlaps++;
+        }
+      });
+    });
+
+    if (finalOverlaps > 0) {
+      console.warn(`Found ${finalOverlaps} overlaps with outer points in final configuration`);
     }
 
     return points;
