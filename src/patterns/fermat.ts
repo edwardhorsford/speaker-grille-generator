@@ -9,17 +9,11 @@ export class FermatPattern implements PatternGenerator {
       divergenceAngle,
       numPoints,
       innerRadius = 0,
-      centerHole,
-      holeRadius,
-      minClearance
+      centerHole
     } = config;
 
     const points: Point[] = [];
     
-    if (centerHole) {
-      points.push({ x: 0, y: 0 });
-    }
-
     const densityFactor = 0.80;
     const c = baseSpacing * densityFactor;
     
@@ -29,7 +23,7 @@ export class FermatPattern implements PatternGenerator {
     const maxR = radius * 1.02;
     const n = Math.ceil((maxR * growthFactor) / (c * 0.2));
 
-    for (let i = centerHole ? 1 : 0; i < n; i++) {
+    for (let i = 0; i < n; i++) {
         const theta = i * divergenceRad;
         
         // More moderate center effect with gradual decay
@@ -41,7 +35,6 @@ export class FermatPattern implements PatternGenerator {
             const x = r * Math.cos(theta);
             const y = r * Math.sin(theta);
             const adjustedSpacing = getSpacing(x, y);
-            // More moderate spacing adjustment
             r = r * Math.max(0.6, Math.min(3.0, adjustedSpacing / baseSpacing));
         }
         
@@ -52,9 +45,11 @@ export class FermatPattern implements PatternGenerator {
         
         const distanceFromCenter = Math.sqrt(x * x + y * y);
         
-        // Simpler distance check
+        // Only skip points if inside inner radius (for center exclusion)
+        if (innerRadius > 0 && distanceFromCenter < innerRadius) continue;
+        
         let tooClose = false;
-        const minDistFactor = 0.8; // Reduced from previous values
+        const minDistFactor = 0.8;
         
         // Check fewer previous points
         for (let j = Math.max(0, points.length - 8); j < points.length; j++) {
@@ -67,9 +62,14 @@ export class FermatPattern implements PatternGenerator {
             }
         }
         
-        if (!tooClose && distanceFromCenter >= innerRadius) {
+        if (!tooClose) {
             points.push({ x, y });
         }
+    }
+
+    // Add center point if needed
+    if (centerHole) {
+      points.unshift({ x: 0, y: 0 });
     }
 
     return points;

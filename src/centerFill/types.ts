@@ -26,6 +26,9 @@ interface CenterFillConfig {
   
   /** Number of attempts for each poisson point */
   poissonAttempts?: number;
+
+  /** Density factor for center fill (-1 to 1) */
+  densityFactor?: number;
 }
 
 interface CenterFillGenerator {

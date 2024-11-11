@@ -10,19 +10,19 @@ export class ForceFillGenerator implements CenterFillGenerator {
       bufferRadius = centerRadius + minDistance,
       outerPoints = [],
       centerHole = false,
-      maxIterations = 150
+      maxIterations = 150,
+      densityFactor = 0  // -1 to 1 range
     } = config;
 
     if (centerRadius <= 0) return [];
+    
+    // Return empty array (or just center point) when density is at minimum
+    if (densityFactor < -0.95) {
+      return centerHole ? [{ x: 0, y: 0 }] : [];
+    }
 
     const spacing = (holeRadius * 2) + minDistance;
-    
-    console.log('Initial parameters:', {
-      centerRadius,
-      spacing,
-      centerHole,
-      outerPointCount: outerPoints.length
-    });
+    const minDistanceFromCenter = centerHole ? spacing : 0;
 
     // Calculate areas
     const centerHoleArea = centerHole ? Math.PI * spacing * spacing : 0;
@@ -40,26 +40,24 @@ export class ForceFillGenerator implements CenterFillGenerator {
       ? bufferZoneArea / bufferZonePoints.length
       : Math.PI * spacing * spacing;
 
-    // Calculate target points for the available area (excluding center hole point)
+    // Calculate target points based on density factor (-1 to 1)
     const rawTargetPoints = availableArea / areaPerPoint;
-    const targetPoints = Math.floor(rawTargetPoints * 1.1);
+    let densityMultiplier;
+    if (densityFactor < 0) {
+      // Exponential decrease for negative values
+      densityMultiplier = Math.exp(densityFactor * 2);
+    } else {
+      // Linear increase for positive values
+      densityMultiplier = 1 + densityFactor;
+    }
     
-    console.log('Area calculations:', {
-      totalArea,
-      centerHoleArea,
-      availableArea,
-      bufferZoneArea,
-      areaPerPoint,
-      rawTargetPoints,
-      targetPoints
-    });
-
+    const targetPoints = Math.max(0.2, Math.floor(rawTargetPoints * densityMultiplier));
+    
     const points: Point[] = [];
     
     // Add center hole point if needed
     if (centerHole) {
       points.push({ x: 0, y: 0 });
-      console.log('Added center hole point');
     }
 
     // Generate remaining points
@@ -71,18 +69,6 @@ export class ForceFillGenerator implements CenterFillGenerator {
       const y = r * Math.sin(theta);
       points.push({ x, y });
     }
-    // Generate points on a grid
-    // const gridSize = Math.floor(Math.sqrt(targetPoints));
-    // for (let i = 0; i < gridSize; i++) {
-    //   for (let j = 0; j < gridSize; j++) {
-    //     if (centerHole && i === 0 && j === 0) continue; // Skip center hole
-        
-    //     const x = ((i + 0.5) / gridSize) * 2 * centerRadius - centerRadius;
-    //     const y = ((j + 0.5) / gridSize) * 2 * centerRadius - centerRadius;
-    //     points.push({ x, y });
-    //   }
-    // }
-    console.log('Points before force direction:', points.length);
 
     // Apply forces
     for (let iter = 0; iter < maxIterations; iter++) {
@@ -101,7 +87,7 @@ export class ForceFillGenerator implements CenterFillGenerator {
           const distSq = dx * dx + dy * dy;
           if (distSq < spacing * spacing * 4) {
             const dist = Math.sqrt(distSq);
-            const force = 2 * Math.pow(spacing / dist, 3); // Stronger force
+            const force = 2 * Math.pow(spacing / dist, 3);
             fx += dx * force;
             fy += dy * force;
           }
@@ -109,7 +95,7 @@ export class ForceFillGenerator implements CenterFillGenerator {
 
         // Repulsion from other points
         points.forEach((p2, j) => {
-          if (i === j || (centerHole && j === 0)) return; // Skip self and center hole
+          if (i === j || (centerHole && j === 0)) return;
           const dx = p.x - p2.x;
           const dy = p.y - p2.y;
           const distSq = dx * dx + dy * dy;
@@ -167,9 +153,9 @@ export class ForceFillGenerator implements CenterFillGenerator {
           newY *= scale;
         }
         
-        // Enforce minimum distance from center hole
-        if (centerHole && newDist < spacing) {
-          const scale = spacing / newDist;
+        // Enforce minimum distance from center
+        if (newDist < minDistanceFromCenter) {
+          const scale = minDistanceFromCenter / newDist;
           newX *= scale;
           newY *= scale;
         }
@@ -183,7 +169,6 @@ export class ForceFillGenerator implements CenterFillGenerator {
       if (maxMove < spacing * 0.01) break;
     }
 
-    console.log('Final point count:', points.length);
     return points;
   }
 }

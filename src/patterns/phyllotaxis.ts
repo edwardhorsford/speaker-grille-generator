@@ -9,19 +9,12 @@ export class PhyllotaxisPattern implements PatternGenerator {
       divergenceAngle,
       numPoints,
       centerExclusion,
-      centerHole,
-      holeRadius,
-      minClearance
+      centerHole
     } = config;
 
     const points: Point[] = [];
-    const centerHoleRadius = holeRadius + minClearance;
-    
-    if (centerHole) {
-      points.push({ x: 0, y: 0 });
-    }
 
-    for (let i = centerHole ? 1 : 0; i < numPoints; i++) {
+    for (let i = 0; i < numPoints; i++) {
       const angle = i * divergenceAngle * (Math.PI / 180);
       
       // Start with base radius
@@ -33,9 +26,6 @@ export class PhyllotaxisPattern implements PatternGenerator {
         const y = r * Math.sin(angle);
         const adjustedSpacing = getSpacing(x, y);
         const spacingRatio = adjustedSpacing / baseSpacing - 1;
-        
-        // Use full adjustment for negative values (denser packing)
-        // Use damped adjustment for positive values (prevent curling)
         const adjustmentFactor = spacingRatio < 0 ? 1.0 : 0.2;
         r = r * (1 + adjustmentFactor * spacingRatio);
       }
@@ -46,11 +36,16 @@ export class PhyllotaxisPattern implements PatternGenerator {
       const y = r * Math.sin(angle);
       
       const distanceFromCenter = Math.sqrt(x * x + y * y);
-      const minDistance = centerHole ? centerHoleRadius : centerExclusion;
       
-      if (distanceFromCenter >= minDistance) {
-        points.push({ x, y });
-      }
+      // Only skip points if there's a center exclusion zone
+      if (centerExclusion > 0 && distanceFromCenter < centerExclusion) continue;
+
+      points.push({ x, y });
+    }
+
+    // Add center point if needed
+    if (centerHole) {
+      points.unshift({ x: 0, y: 0 });
     }
 
     return points;

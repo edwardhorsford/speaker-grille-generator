@@ -32,7 +32,7 @@ export function createPatternConfig(
       (Math.pow(spacing || baseConfig.holeRadius * 2, 2)));
     
     // Adjust point count based on pattern type
-    const patternMultiplier = pattern === 'fermat' ? 6 : 1; // Reduced from 4 to 2.5
+    const patternMultiplier = pattern === 'fermat' ? 6 : 1;
     const adjustedNumPoints = Math.ceil(baseNumPoints * patternMultiplier);
 
     return {

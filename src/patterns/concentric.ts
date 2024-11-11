@@ -1,8 +1,5 @@
 import { Point, ConcentricPatternConfig, PatternGenerator } from './types';
 
-/**
- * Generates points in concentric rings, with points evenly spaced around each ring.
- */
 export class ConcentricPattern implements PatternGenerator {
   generatePoints(config: ConcentricPatternConfig): Point[] {
     const { 
@@ -16,19 +13,13 @@ export class ConcentricPattern implements PatternGenerator {
 
     const points: Point[] = [];
     
-    // If centerHole is true and no innerRadius, add a point at the exact center
-    if (centerHole && !innerRadius) {
-      points.push({ x: 0, y: 0 });
-    }
-
-    // Start at innerRadius (or minimum spacing if centerHole)
+    // Start at the minimum radius or center exclusion radius
     let r = innerRadius;
     const minimumSpacing = 2 * holeRadius + minClearance;
 
     // Generate rings until we reach the outer radius
     while (r <= radius) {
       // Calculate how many points can fit around this ring
-      // Circumference divided by the minimum spacing between points
       const circumference = 2 * Math.PI * r;
       const pointsInRing = Math.floor(circumference / minimumSpacing);
       
@@ -47,12 +38,14 @@ export class ConcentricPattern implements PatternGenerator {
       r += concentricSpacing;
     }
 
+    // Add center point if needed
+    if (centerHole) {
+      points.unshift({ x: 0, y: 0 });
+    }
+
     return points;
   }
 
-  /**
-   * Calculate the optimal spacing between rings based on hole size and clearance
-   */
   static getOptimalSpacing(holeRadius: number, minClearance: number): number {
     // A good default is slightly more than twice the hole diameter
     // This ensures holes in adjacent rings don't overlap

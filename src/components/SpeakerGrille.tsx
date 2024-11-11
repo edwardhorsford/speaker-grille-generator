@@ -38,6 +38,7 @@ const SpeakerGrille = () => {
   const [pattern, setPattern] = useState<PatternType>('phyllotaxis');
   const [minClearance, setMinClearance] = useState(DEFAULT_VALUES_PX.minClearance);
   const [centerExclusion, setCenterExclusion] = useState(DEFAULT_VALUES_PX.centerExclusion);
+  const [centerDensity, setCenterDensity] = useState(0);
   const [concentricSpacing, setConcentricSpacing] = useState(DEFAULT_VALUES_PX.concentricSpacing);
   const [sizeScaling, setSizeScaling] = useState(0);
   const [scaleType, setScaleType] = useState<ScaleType>('linear');
@@ -169,18 +170,15 @@ const SpeakerGrille = () => {
         return distSq >= centerExclusion * centerExclusion && 
                distSq <= bufferRadius * bufferRadius;
       }),
-      centerHole
+      centerHole,
+      densityFactor: centerDensity
     });
-
-    // Tag points with source for debugging
-    const taggedPoints = points.map(p => ({
+    
+    return points.map(p => ({
       ...p,
       source: 'center'
     }));
-    
-    console.log(`Generated ${points.length} center points`);
-    return taggedPoints;
-  }, [centerAlgorithm, centerExclusion, holeRadius, minClearance, patternPoints, centerHole]);
+  }, [centerAlgorithm, centerExclusion, holeRadius, minClearance, patternPoints, centerHole, centerDensity]);
 
   const exportSVG = () => {
     if (!svgRef.current) return;
@@ -233,9 +231,9 @@ const SpeakerGrille = () => {
 
   return (
     <div className="w-screen p-4">
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 max-w-[1400px] mx-auto">
         {/* SVG Display */}
-        <div className="w-full aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
+        <div className="max-w-3xl mx-auto w-full aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
           <svg
             ref={svgRef}
             viewBox={`${-radius} ${-radius} ${2 * radius} ${2 * radius}`}
@@ -396,6 +394,22 @@ const SpeakerGrille = () => {
               precision={1}
             />
 
+            {centerExclusion > 0 && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium">
+                  Center Fill Density (<FormattedValue value={centerDensity} precision={2} />)
+                </label>
+                <input
+                  type="range"
+                  min={-1}
+                  max={1}
+                  step={0.05}
+                  value={centerDensity}
+                  onChange={(e) => setCenterDensity(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+            )}
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
