@@ -7,7 +7,6 @@ export class ForceFillGenerator implements CenterFillGenerator {
       centerRadius,
       minDistance,
       holeRadius,
-      bufferRadius = centerRadius + minDistance,
       outerPoints = [],
       centerHole = false,
       maxIterations = 150,

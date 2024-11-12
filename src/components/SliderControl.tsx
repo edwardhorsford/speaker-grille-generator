@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { FormattedValue } from './FormattedValue';
-import { MM_TO_PX, Units } from '../constants';
+import { MM_TO_PX, PX_TO_MM, Units } from '../constants';
 
 interface SliderControlProps {
   label: string;
@@ -27,7 +27,7 @@ export const SliderControl: React.FC<SliderControlProps> = ({
   useEffect(() => {
     console.log(`${label} Control:`, {
       internalValue: value,
-      displayValue: isMillimeters ? value / MM_TO_PX : value,
+      displayValue: isMillimeters ? value * PX_TO_MM  : value,
       range: isMillimeters ? mmRange : pxRange,
       units
     });

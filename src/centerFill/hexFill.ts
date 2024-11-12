@@ -20,11 +20,6 @@ export class HexFillGenerator implements CenterFillGenerator {
     // Calculate base spacing
     const baseSpacing = (holeRadius * 2) + minDistance;
     
-    // Calculate maximum packing density
-    const minHexArea = 2 * Math.sqrt(3) * Math.pow(baseSpacing/2, 2);
-    const centerArea = Math.PI * Math.pow(centerRadius, 2);
-    const maxPoints = Math.floor(centerArea / minHexArea);
-    
     // Adjust density scaling
     // At densityFactor = -1: very sparse
     // At densityFactor = 0:  default density

@@ -68,5 +68,5 @@ export interface PatternGenerator {
   /**
    * Generate points for the pattern based on configuration
    */
-  generatePoints(config: SpiralPatternConfig | ConcentricPatternConfig, getSpacing: (x: number, y: number) => number): Point[];
+  generatePoints(config: SpiralPatternConfig | ConcentricPatternConfig): Point[];
 }

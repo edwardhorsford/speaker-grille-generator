@@ -14,7 +14,6 @@ export const FormattedValue: React.FC<FormattedValueProps> = ({
   value, 
   units = '', 
   precision = 1,
-  minWidth = 4
 }) => {
   const displayValue = units === 'mm' ? pxToMm(value) : value;
   const formattedValue = displayValue.toFixed(precision);

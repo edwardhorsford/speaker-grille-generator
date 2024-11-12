@@ -1,5 +1,5 @@
 import { Point } from '../patterns/types';
-import { CenterFillGenerator, CenterFillConfig, checkOverlap, isWithinCenter } from './types';
+import { CenterFillGenerator, CenterFillConfig } from './types';
 
 export class PoissonFillGenerator implements CenterFillGenerator {
   generatePoints(config: CenterFillConfig): Point[] {

@@ -7,7 +7,6 @@ export class FermatPattern implements PatternGenerator {
       spacing: baseSpacing,
       getSpacing,
       divergenceAngle,
-      numPoints,
       innerRadius = 0,
       centerHole
     } = config;

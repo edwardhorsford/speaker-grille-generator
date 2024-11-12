@@ -1,3 +1,5 @@
+import { Point, CenterFillGenerator, CenterFillConfig } from './types';
+
 export class ConcentricFillGenerator implements CenterFillGenerator {
   generatePoints(config: CenterFillConfig): Point[] {
     const {

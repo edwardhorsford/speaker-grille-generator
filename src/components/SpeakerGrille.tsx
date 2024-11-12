@@ -4,7 +4,7 @@ import { getPatternGenerator, createPatternConfig } from '../patterns/pattern-fa
 import { generateCenterPoints, CenterFillAlgorithm } from '../centerFill';
 import { FormattedValue } from './FormattedValue';
 import { SliderControl } from './SliderControl';
-import { MM_TO_PX, PX_TO_MM, Units, ScaleType } from '../constants';
+import { MM_TO_PX, Units, ScaleType } from '../constants';
 
 // Initial values in millimeters
 const DEFAULT_VALUES_MM = {
@@ -198,7 +198,6 @@ const SpeakerGrille = () => {
     
     if (units === 'mm') {
       // Generate random values in mm and convert to px
-      const randomMmSpacing = 1 + Math.random() * 29; // 1-30mm
       const randomMmHoleRadius = 2.5 + Math.random() * 9.5; // 0.5-10mm
       
       setHoleRadius(randomMmHoleRadius * MM_TO_PX);
@@ -577,6 +576,18 @@ const SpeakerGrille = () => {
               onChange={(e) => setSelectedColour(e.target.value)}
               className="h-10 w-10 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <label className="text-sm font-medium mr-4">Units:</label>
+            <select
+              value={units}
+              onChange={(e) => setUnits(e.target.value as Units)}
+              className="border rounded p-2"
+            >
+              <option value="mm">Millimeters</option>
+              <option value="px">Pixels</option>
+            </select>
           </div>
 
           <div className="flex items-center space-x-2">
