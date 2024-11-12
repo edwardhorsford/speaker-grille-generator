@@ -166,9 +166,8 @@ const SpeakerGrille = () => {
       bufferRadius: centerExclusion + (2 * holeRadius + minClearance),
       outerPoints: patternPoints.filter(p => {
         const distSq = p.x * p.x + p.y * p.y;
-        const bufferRadius = centerExclusion + (2 * holeRadius + minClearance);
-        return distSq >= centerExclusion * centerExclusion && 
-               distSq <= bufferRadius * bufferRadius;
+        // Only exclude points that are definitely too far to matter
+        return distSq >= centerExclusion * centerExclusion - (4 * holeRadius * holeRadius);
       }),
       centerHole,
       densityFactor: centerDensity
@@ -379,8 +378,10 @@ const SpeakerGrille = () => {
                 onChange={(e) => setCenterAlgorithm(e.target.value as CenterFillAlgorithm)}
                 className="w-full border rounded p-2"
               >
-                <option value="force">Force-Directed</option>
-                <option value="poisson">Poisson Disc</option>
+                <option value="force">Force-directed</option>
+                <option value="poisson">Poisson disc</option>
+                <option value="hex">Hex grid</option>
+                <option value="concentric">Concentric rings</option>
               </select>
             </div>
 
@@ -441,7 +442,7 @@ const SpeakerGrille = () => {
               value={holeRadius}
               onChange={setHoleRadius}
               units={units}
-              mmRange={[0.5, 50, 0.5]}
+              mmRange={[2, 50, 0.5]}
               pxRange={[2, 40, 0.5]}
               precision={1}
             />

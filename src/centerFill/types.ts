@@ -1,6 +1,6 @@
 import type { Point } from '../patterns/types';
 
-type CenterFillAlgorithm = 'force' | 'poisson';
+type CenterFillAlgorithm = 'force' | 'poisson' | 'hex' | 'concentric';
 
 interface CenterFillConfig {
   /** Radius of center area to fill */
