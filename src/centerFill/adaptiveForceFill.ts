@@ -20,6 +20,9 @@ export class AdaptiveForceFillGenerator implements CenterFillGenerator {
     const points = patternPoints.map(p => ({ ...p }));
     const baseSpacing = (holeRadius * 2) + minDistance;
 
+    // Define safe radius for new point placement
+    const safeRadius = centerRadius * 0.9;
+
     // Identify which points are in the center area
     const pointsInCenter = points.filter(p => {
       const distSq = p.x * p.x + p.y * p.y;
@@ -28,7 +31,22 @@ export class AdaptiveForceFillGenerator implements CenterFillGenerator {
 
     // Adjust center point count based on density factor
     if (densityFactor !== 0) {
-      const targetCount = Math.max(1, Math.round(pointsInCenter.length * (1 + densityFactor)));
+      // Calculate target count based on density factor
+      let targetCount;
+      if (densityFactor > 0) {
+        // For positive density, ensure we at least double points or hit minimum of 30
+        const doubledCount = pointsInCenter.length * 2;
+        const minCount = Math.max(30, doubledCount);
+        const maxCount = pointsInCenter.length * 4; // Cap at 4x for very high density
+        
+        // Fix the scaling calculation - now more density = more points
+        targetCount = Math.round(
+          minCount + ((maxCount - minCount) * densityFactor)
+        );
+      } else {
+        // For negative density, keep existing behavior
+        targetCount = Math.max(1, Math.round(pointsInCenter.length * (1 + densityFactor)));
+      }
       
       if (targetCount < pointsInCenter.length) {
         // Remove points when reducing density
@@ -67,16 +85,54 @@ export class AdaptiveForceFillGenerator implements CenterFillGenerator {
         }
       } else if (targetCount > pointsInCenter.length) {
         // Add points when increasing density
-        while (pointsInCenter.length < targetCount) {
+        let failedAttempts = 0;
+        const maxFailedAttempts = 100;
+
+        // Calculate minimum spacing based on density factor
+        // Higher density = allow closer packing
+        const densitySpacingFactor = 0.9 - (densityFactor * 0.3); // At density 1, allow points 60% of base spacing
+        const minSpacingRequired = baseSpacing * densitySpacingFactor;
+
+        while (pointsInCenter.length < targetCount && failedAttempts < maxFailedAttempts) {
           let bestX = 0, bestY = 0;
           let maxMinDist = 0;
           
-          for (let attempts = 0; attempts < 50; attempts++) {
-            const angle = Math.random() * Math.PI * 2;
-            const r = Math.random() * centerRadius;
-            const x = Math.cos(angle) * r;
-            const y = Math.sin(angle) * r;
+          // Try more positions each iteration
+          for (let attempts = 0; attempts < 150; attempts++) {
+            let x, y;
             
+            if (attempts % 3 === 0 && pointsInCenter.length >= 2) {
+              // Try between existing points
+              const p1 = pointsInCenter[Math.floor(Math.random() * pointsInCenter.length)];
+              const p2 = pointsInCenter[Math.floor(Math.random() * pointsInCenter.length)];
+              const ratio = Math.random();
+              x = p1.x * ratio + p2.x * (1 - ratio);
+              y = p1.y * ratio + p2.y * (1 - ratio);
+              
+              // Add controlled randomness
+              const offset = baseSpacing * 0.4;
+              x += (Math.random() - 0.5) * offset;
+              y += (Math.random() - 0.5) * offset;
+            } else if (attempts % 3 === 1) {
+              // Try grid-based positioning
+              const gridSize = Math.sqrt(targetCount) * 1.5;
+              const cellSize = (safeRadius * 2) / gridSize;
+              const gridX = Math.floor(Math.random() * gridSize) - gridSize/2;
+              const gridY = Math.floor(Math.random() * gridSize) - gridSize/2;
+              x = gridX * cellSize + (Math.random() - 0.5) * cellSize;
+              y = gridY * cellSize + (Math.random() - 0.5) * cellSize;
+            } else {
+              // Random position within safe radius
+              const angle = Math.random() * Math.PI * 2;
+              const r = Math.pow(Math.random(), 0.5) * safeRadius; // Square root for better radial distribution
+              x = Math.cos(angle) * r;
+              y = Math.sin(angle) * r;
+            }
+            
+            // Skip if outside safe zone
+            if (x * x + y * y > safeRadius * safeRadius) continue;
+            
+            // Check distance to all existing points
             let minDist = Number.POSITIVE_INFINITY;
             points.forEach(p => {
               const dx = x - p.x;
@@ -92,12 +148,13 @@ export class AdaptiveForceFillGenerator implements CenterFillGenerator {
             }
           }
           
-          if (maxMinDist > baseSpacing) {
+          if (maxMinDist > minSpacingRequired) {
             const newPoint = { x: bestX, y: bestY };
             points.push(newPoint);
             pointsInCenter.push(newPoint);
+            failedAttempts = 0;
           } else {
-            break;
+            failedAttempts++;
           }
         }
       }
@@ -118,7 +175,7 @@ export class AdaptiveForceFillGenerator implements CenterFillGenerator {
           const distRatio = Math.min(1, distFromCenter / centerRadius);
           
           // Force gets stronger towards center
-          const centerForceScale = forceStrength * (1 - Math.pow(distRatio, 2));
+          const centerForceScale = (forceStrength * 0.5) * (1 - Math.pow(distRatio, 2));
 
           // Consider all points for repulsion
           points.forEach(p2 => {

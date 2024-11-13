@@ -361,7 +361,7 @@ const SpeakerGrille = () => {
                     <input
                       type="range"
                       min={0}
-                      max={1}
+                      max={2}  // Changed from 1 to 2
                       step={0.05}
                       value={forceStrength}
                       onChange={(e) => setForceStrength(Number(e.target.value))}
