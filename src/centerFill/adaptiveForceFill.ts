@@ -7,41 +7,40 @@ export class AdaptiveForceFillGenerator implements CenterFillGenerator {
       centerRadius,
       minDistance,
       holeRadius,
-      outerPoints = [],
+      patternPoints = [],
       centerHole = false,
       maxIterations = 150,
       densityFactor = 0,
       forceStrength = 1.0
     } = config;
 
-    console.log('AdaptiveForceFill Starting:', {
-      pointsReceived: outerPoints.length,
-      centerRadius,
-      forceStrength,
-      samplePoints: outerPoints.slice(0, 3)
-    });
+    if (centerRadius <= 0) return patternPoints;
 
-    if (centerRadius <= 0) return [];
-
-    // Start with fresh copies of original points
-    const points = outerPoints.map(p => ({ ...p }));
+    // Create working copy of all points
+    const points = patternPoints.map(p => ({ ...p }));
     const baseSpacing = (holeRadius * 2) + minDistance;
 
-    // Adjust point count based on density factor
+    // Identify which points are in the center area
+    const pointsInCenter = points.filter(p => {
+      const distSq = p.x * p.x + p.y * p.y;
+      return distSq <= centerRadius * centerRadius;
+    });
+
+    // Adjust center point count based on density factor
     if (densityFactor !== 0) {
-      const targetCount = Math.max(1, Math.round(points.length * (1 + densityFactor)));
+      const targetCount = Math.max(1, Math.round(pointsInCenter.length * (1 + densityFactor)));
       
-      if (targetCount < points.length) {
+      if (targetCount < pointsInCenter.length) {
         // Remove points when reducing density
-        while (points.length > targetCount) {
+        while (pointsInCenter.length > targetCount) {
           let maxNeighbors = -1;
           let indexToRemove = -1;
           
-          points.forEach((p1, i) => {
+          pointsInCenter.forEach((p1, i) => {
             if (centerHole && i === 0) return;
             
             let neighbors = 0;
-            points.forEach((p2, j) => {
+            pointsInCenter.forEach((p2, j) => {
               if (i !== j) {
                 const dx = p1.x - p2.x;
                 const dy = p1.y - p2.y;
@@ -58,12 +57,17 @@ export class AdaptiveForceFillGenerator implements CenterFillGenerator {
           });
           
           if (indexToRemove >= 0) {
-            points.splice(indexToRemove, 1);
+            // Remove from both arrays
+            const removed = pointsInCenter.splice(indexToRemove, 1)[0];
+            const mainIndex = points.findIndex(p => p.x === removed.x && p.y === removed.y);
+            if (mainIndex >= 0) {
+              points.splice(mainIndex, 1);
+            }
           }
         }
-      } else if (targetCount > points.length) {
+      } else if (targetCount > pointsInCenter.length) {
         // Add points when increasing density
-        while (points.length < targetCount) {
+        while (pointsInCenter.length < targetCount) {
           let bestX = 0, bestY = 0;
           let maxMinDist = 0;
           
@@ -91,6 +95,7 @@ export class AdaptiveForceFillGenerator implements CenterFillGenerator {
           if (maxMinDist > baseSpacing) {
             const newPoint = { x: bestX, y: bestY };
             points.push(newPoint);
+            pointsInCenter.push(newPoint);
           } else {
             break;
           }
@@ -100,12 +105,12 @@ export class AdaptiveForceFillGenerator implements CenterFillGenerator {
 
     // Only run force simulation if force strength is non-zero
     if (forceStrength > 0) {
-      // Force simulation
+      // Apply forces only to center points but consider all points for repulsion
       for (let iter = 0; iter < maxIterations; iter++) {
         let maxMove = 0;
-        const forces: Point[] = points.map(() => ({ x: 0, y: 0 }));
+        const forces: Point[] = pointsInCenter.map(() => ({ x: 0, y: 0 }));
 
-        points.forEach((p1, i) => {
+        pointsInCenter.forEach((p1, i) => {
           if (centerHole && i === 0) return;
 
           // Calculate distance from center for force scaling
@@ -115,8 +120,9 @@ export class AdaptiveForceFillGenerator implements CenterFillGenerator {
           // Force gets stronger towards center
           const centerForceScale = forceStrength * (1 - Math.pow(distRatio, 2));
 
-          points.forEach((p2, j) => {
-            if (i === j) return;
+          // Consider all points for repulsion
+          points.forEach(p2 => {
+            if (p1 === p2) return;
             
             const dx = p1.x - p2.x;
             const dy = p1.y - p2.y;
@@ -134,7 +140,7 @@ export class AdaptiveForceFillGenerator implements CenterFillGenerator {
         // Apply forces with adaptive damping
         const damping = 0.1 * Math.pow(0.95, iter);
 
-        points.forEach((p, i) => {
+        pointsInCenter.forEach((p, i) => {
           if (centerHole && i === 0) return;
 
           const moveX = forces[i].x * damping;
@@ -148,19 +154,24 @@ export class AdaptiveForceFillGenerator implements CenterFillGenerator {
           if (newDist <= centerRadius) {
             p.x = newX;
             p.y = newY;
+            
+            // Update corresponding point in main array
+            const mainIndex = points.findIndex(point => point === p);
+            if (mainIndex >= 0) {
+              points[mainIndex].x = newX;
+              points[mainIndex].y = newY;
+            }
+            
             maxMove = Math.max(maxMove, Math.abs(moveX), Math.abs(moveY));
           }
         });
 
         if (maxMove < baseSpacing * 0.001) {
-          console.log(`Force simulation converged after ${iter} iterations`);
           break;
         }
       }
     }
-
-    const returnPoints = points;
     
-    return returnPoints;
+    return points;
   }
 }

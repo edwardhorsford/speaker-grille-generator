@@ -12,11 +12,8 @@ interface CenterFillConfig {
   /** Radius of each hole */
   holeRadius: number;
   
-  /** Radius to consider outer points */
-  bufferRadius?: number;
-  
-  /** Points near the center area to avoid */
-  outerPoints?: Point[];
+  /** All points in the pattern */
+  patternPoints?: Point[];
   
   /** Whether to force a hole in the exact center */
   centerHole?: boolean;

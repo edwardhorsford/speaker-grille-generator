@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from 'react';
-import { PatternType, BasePatternConfig } from '../patterns/types';
+import { PatternType, BasePatternConfig, Point } from '../patterns/types';
 import { getPatternGenerator, createPatternConfig } from '../patterns/pattern-factory';
 import { generateCenterPoints, CenterFillAlgorithm } from '../centerFill';
 import { FormattedValue } from './FormattedValue';
@@ -31,7 +31,6 @@ const SpeakerGrille = () => {
   const [radius, setRadius] = useState(DEFAULT_VALUES_PX.radius);
   const [holeRadius, setHoleRadius] = useState(DEFAULT_VALUES_PX.holeRadius);
   const [divergenceAngle, setDivergenceAngle] = useState(137.5);
-  // const [numPoints, setNumPoints] = useState(2000);
   const [spacingFactor, setSpacingFactor] = useState(0);
   const [spacingScaling, setSpacingScaling] = useState(0);
   const [forceStrength, setForceStrength] = useState(1.0);
@@ -44,7 +43,7 @@ const SpeakerGrille = () => {
   const [scaleType, setScaleType] = useState<ScaleType>('linear');
   const [useStrokes, setUseStrokes] = useState(false);
   const [units, setUnits] = useState<Units>('mm');
-  const [centerAlgorithm, setCenterAlgorithm] = useState<CenterFillAlgorithm>('force');
+  const [centerAlgorithm, setCenterAlgorithm] = useState<CenterFillAlgorithm>('adaptiveForce');
   const [invertColours, setInvertColours] = useState(false);
   const [selectedColour, setSelectedColour] = useState('#000000');
   const [includeAlignmentMarks, setIncludeAlignmentMarks] = useState(false);
@@ -84,31 +83,19 @@ const SpeakerGrille = () => {
     }
   };
 
-  const patternPoints = useMemo(() => {
-    console.log('Generating pattern points...');
-
-    // Calculate the base spacing based on spacingFactor and holeRadius
-    const baseSpacing = (holeRadius) * (1.5 + spacingFactor);
-
-    // Calculate the maximum possible spacing based on the scaling
+  // Generate all points in a single pass
+  const points = useMemo(() => {
+    // First generate base pattern
+    const baseSpacing = holeRadius * (1.5 + spacingFactor);
     const maxSpacingMultiplier = spacingScaling > 0 
-      ? (scaleType === 'linear' 
-        ? 1 + spacingScaling  // At edges, distance = 1, so 1 + scaling
-        : Math.exp(spacingScaling))
-      : 1;  // When scaling is negative, base spacing is the maximum
+      ? (scaleType === 'linear' ? 1 + spacingScaling : Math.exp(spacingScaling))
+      : 1;
 
-    // Calculate points using the maximum possible spacing to ensure coverage
-    const maxSpacing = baseSpacing * maxSpacingMultiplier;
-    const numPoints = Math.round((radius * radius) / (baseSpacing * baseSpacing) * (maxSpacingMultiplier * maxSpacingMultiplier));
+    const numPoints = Math.round(
+      (radius * radius) / (baseSpacing * baseSpacing) * 
+      (maxSpacingMultiplier * maxSpacingMultiplier)
+    );
     
-    console.log('Point calculation:', {
-      baseSpacing,
-      maxSpacingMultiplier,
-      maxSpacing,
-      numPoints
-    });
-    
-    // Create base configuration
     const baseConfig: BasePatternConfig = {
       radius,
       holeRadius,
@@ -117,7 +104,6 @@ const SpeakerGrille = () => {
       getSpacing: (x: number, y: number) => getSpacing(x, y, baseSpacing)
     };
 
-    // Get pattern-specific configuration
     const config = createPatternConfig(
       pattern,
       baseConfig,
@@ -127,111 +113,44 @@ const SpeakerGrille = () => {
       concentricSpacing
     );
 
-    // Generate points using appropriate pattern generator
+    // Generate initial pattern points
     const generator = getPatternGenerator(pattern);
-    const points = generator.generatePoints(config);
+    const patternPoints = generator.generatePoints(config);
 
-    const filteredPoints = centerAlgorithm === 'adaptiveForce'
-      // For adaptive mode, keep all points (we'll filter during render)
-      ? points.map(p => ({
-          ...p,
-          source: 'pattern'
-        }))
-      // For other modes, filter out center points now
-      : points.filter(p => {
-          const distSq = p.x * p.x + p.y * p.y;
-          return distSq > centerExclusion * centerExclusion;
-        }).map(p => ({
-          ...p,
-          source: 'pattern'
-        }));
-    // Remove the separate tagging since we did it above
-    const taggedPoints = filteredPoints;
-    
-    console.log(`Generated ${points.length} pattern points`);
-    return taggedPoints;
+    // If no center area to handle, just return pattern points
+    if (centerExclusion <= 0) {
+      return patternPoints;
+    }
+
+    // Let center fill algorithm handle the pattern
+    return generateCenterPoints({
+      algorithm: centerAlgorithm,
+      centerRadius: centerExclusion,
+      minDistance: minClearance,
+      holeRadius: holeRadius,
+      patternPoints: patternPoints,
+      centerHole,
+      densityFactor: centerDensity,
+      forceStrength
+    });
   }, [
     pattern,
     radius,
     holeRadius,
     divergenceAngle,
     spacingFactor,
-    spacingScaling,  // Add spacingScaling
-    scaleType,       // Add scaleType
+    spacingScaling,
+    scaleType,
     minClearance,
     concentricSpacing,
     centerExclusion,
     centerHole,
+    centerAlgorithm,
+    centerDensity,
     forceStrength
   ]);
 
-  const centerPoints = useMemo(() => {
-    if (centerExclusion <= 0) return [];
-    
-    // Get original pattern points that are in the center area
-    const pointsInCenter = patternPoints.filter(p => {
-      const distSq = p.x * p.x + p.y * p.y;
-      return distSq <= centerExclusion * centerExclusion;
-    });
-
-    console.log('Center point calculation:', {
-      centerAlgorithm,
-      forceStrength,
-      totalPatternPoints: patternPoints.length,
-      pointsInCenter: pointsInCenter.length,
-      sampleCenterPoints: pointsInCenter.slice(0, 3)
-    });
-
-    if (centerAlgorithm === 'adaptiveForce') {
-      // For adaptive force, we directly manipulate the center points
-      const adaptivePoints = generateCenterPoints({
-        algorithm: centerAlgorithm,
-        centerRadius: centerExclusion,
-        minDistance: minClearance,
-        holeRadius: holeRadius,
-        bufferRadius: centerExclusion + (2 * holeRadius + minClearance),
-        outerPoints: pointsInCenter,  // Send only points that were in center
-        centerHole,
-        densityFactor: centerDensity,
-        forceStrength
-      });
-
-      console.log('Adaptive points returned:', {
-        count: adaptivePoints.length,
-        samplePoints: adaptivePoints.slice(0, 3)
-      });
-
-      return adaptivePoints.map(p => ({
-        ...p,
-        source: 'center'
-      }));
-    } else {
-      // For other algorithms, use points near the center as constraints
-      const pointsNearCenter = patternPoints.filter(p => {
-        const distSq = p.x * p.x + p.y * p.y;
-        return distSq > centerExclusion * centerExclusion && 
-               distSq <= (centerExclusion + 2 * holeRadius) * (centerExclusion + 2 * holeRadius);
-      });
-
-      const points = generateCenterPoints({
-        algorithm: centerAlgorithm,
-        centerRadius: centerExclusion,
-        minDistance: minClearance,
-        holeRadius: holeRadius,
-        bufferRadius: centerExclusion + (2 * holeRadius + minClearance),
-        outerPoints: pointsNearCenter,
-        centerHole,
-        densityFactor: centerDensity
-      });
-
-      return points.map(p => ({
-        ...p,
-        source: 'center'
-      }));
-    }
-  }, [centerAlgorithm, centerExclusion, holeRadius, minClearance, patternPoints, centerHole, centerDensity, forceStrength]);
-
-
+  // File operations
   const exportSVG = () => {
     if (!svgRef.current) return;
     const svgElement = svgRef.current.cloneNode(true) as SVGSVGElement;
@@ -246,21 +165,13 @@ const SpeakerGrille = () => {
   };
 
   const randomize = () => {
-    // Use suggested angles from PhyllotaxisPattern for better results
-    // setDivergenceAngle(Math.random() * 360);
-    
     if (units === 'mm') {
-      // Generate random values in mm and convert to px
       const randomMmHoleRadius = 2.5 + Math.random() * 9.5; // 0.5-10mm
-      
       setHoleRadius(randomMmHoleRadius * MM_TO_PX);
     } else {
-      
       setHoleRadius(2 + Math.random() * 38); // 2-40px
     }
-
     setSpacingFactor(Math.random() * 2 - 1);
-    
     setSizeScaling(-1 + Math.random() * 2);
   };
 
@@ -272,7 +183,6 @@ const SpeakerGrille = () => {
     setCenterExclusion(DEFAULT_VALUES_PX.centerExclusion);
     setConcentricSpacing(DEFAULT_VALUES_PX.concentricSpacing);
     setDivergenceAngle(137.5);
-    // setNumPoints(2000);
     setSizeScaling(0);
     setSpacingScaling(0);
     setScaleType('linear');
@@ -288,7 +198,7 @@ const SpeakerGrille = () => {
           <svg
             ref={svgRef}
             viewBox={`${-radius} ${-radius} ${2 * radius} ${2 * radius}`}
-            className={`w-[90%] h-[90%] rounded-full`}
+            className="w-[90%] h-[90%] rounded-full"
             style={{
               background: invertColours ? selectedColour : '#FFFFFF',
               fill: invertColours ? '#FFFFFF' : selectedColour,
@@ -304,52 +214,20 @@ const SpeakerGrille = () => {
                 fill={selectedColour}
               />
             )}
-            {[
-              // For adaptive force, we filter at render time
-              // For other modes, points are already filtered
-              ...(centerAlgorithm === 'adaptiveForce'
-                ? patternPoints.filter(p => {
-                    const distSq = p.x * p.x + p.y * p.y;
-                    return distSq > centerExclusion * centerExclusion;
-                  })
-                : patternPoints),  // These are already filtered for other modes
-              ...centerPoints
-            ].map((point, i) => {
+            {points.map((point, i) => {
               const distSq = point.x * point.x + point.y * point.y;
               const scaledHoleRadius = getCircleSize(point.x, point.y, holeRadius);
               const isOutsideRadius = distSq > (radius - scaledHoleRadius) * (radius - scaledHoleRadius);
               
-              // Debug log
-              if (i < 5 || i > (patternPoints.length + centerPoints.length - 5)) {
-                console.log(`Point ${i}:`, {
-                  source: point.source,
-                  x: point.x,
-                  y: point.y,
-                  distFromCenter: Math.sqrt(distSq),
-                  isOutsideRadius
-                });
-              }
               if (allowPartialHoles || !isOutsideRadius) {
                 return (
                   <circle
-                    key={`${point.source}-${i}`}
+                    key={i}
                     cx={point.x}
                     cy={point.y}
                     r={scaledHoleRadius}
-                    fill={
-                      useStrokes
-                        ? 'none'
-                        : invertColours
-                          ? 'white'
-                          : selectedColour
-                    }
-                    stroke={
-                      useStrokes
-                        ? invertColours
-                          ? '#FFFFFF'
-                          : selectedColour
-                        : 'none'
-                    }
+                    fill={useStrokes ? 'none' : invertColours ? 'white' : selectedColour}
+                    stroke={useStrokes ? (invertColours ? '#FFFFFF' : selectedColour) : 'none'}
                     strokeWidth={useStrokes ? 0.5 : 0}
                   />
                 );
@@ -581,7 +459,6 @@ const SpeakerGrille = () => {
                 className="w-full"
               />
             </div>
-
           </div>
         </div>
 
