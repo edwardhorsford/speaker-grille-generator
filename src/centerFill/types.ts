@@ -1,6 +1,6 @@
 import type { Point } from '../patterns/types';
 
-type CenterFillAlgorithm = 'force' | 'poisson' | 'hex' | 'concentric';
+type CenterFillAlgorithm = 'adaptiveForce' | 'force' | 'poisson' | 'hex' | 'concentric';
 
 interface CenterFillConfig {
   /** Radius of center area to fill */
@@ -29,6 +29,9 @@ interface CenterFillConfig {
 
   /** Density factor for center fill (-1 to 1) */
   densityFactor?: number;
+
+  /** Strength of force direction (0 to 1) */
+  forceStrength?: number;
 }
 
 interface CenterFillGenerator {

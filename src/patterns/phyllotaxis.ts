@@ -8,7 +8,6 @@ export class PhyllotaxisPattern implements PatternGenerator {
       getSpacing,
       divergenceAngle,
       numPoints,
-      centerExclusion,
       centerHole
     } = config;
 
@@ -35,11 +34,6 @@ export class PhyllotaxisPattern implements PatternGenerator {
       const x = r * Math.cos(angle);
       const y = r * Math.sin(angle);
       
-      const distanceFromCenter = Math.sqrt(x * x + y * y);
-      
-      // Only skip points if there's a center exclusion zone
-      if (centerExclusion > 0 && distanceFromCenter < centerExclusion) continue;
-
       points.push({ x, y });
     }
 

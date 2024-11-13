@@ -34,7 +34,7 @@ const SpeakerGrille = () => {
   // const [numPoints, setNumPoints] = useState(2000);
   const [spacingFactor, setSpacingFactor] = useState(0);
   const [spacingScaling, setSpacingScaling] = useState(0);
-
+  const [forceStrength, setForceStrength] = useState(1.0);
   const [pattern, setPattern] = useState<PatternType>('phyllotaxis');
   const [minClearance, setMinClearance] = useState(DEFAULT_VALUES_PX.minClearance);
   const [centerExclusion, setCenterExclusion] = useState(DEFAULT_VALUES_PX.centerExclusion);
@@ -113,7 +113,6 @@ const SpeakerGrille = () => {
       radius,
       holeRadius,
       minClearance,
-      centerExclusion,
       centerHole,
       getSpacing: (x: number, y: number) => getSpacing(x, y, baseSpacing)
     };
@@ -131,12 +130,23 @@ const SpeakerGrille = () => {
     // Generate points using appropriate pattern generator
     const generator = getPatternGenerator(pattern);
     const points = generator.generatePoints(config);
-    
-    // Tag points with source for debugging
-    const taggedPoints = points.map(p => ({
-      ...p,
-      source: 'pattern'
-    }));
+
+    const filteredPoints = centerAlgorithm === 'adaptiveForce'
+      // For adaptive mode, keep all points (we'll filter during render)
+      ? points.map(p => ({
+          ...p,
+          source: 'pattern'
+        }))
+      // For other modes, filter out center points now
+      : points.filter(p => {
+          const distSq = p.x * p.x + p.y * p.y;
+          return distSq > centerExclusion * centerExclusion;
+        }).map(p => ({
+          ...p,
+          source: 'pattern'
+        }));
+    // Remove the separate tagging since we did it above
+    const taggedPoints = filteredPoints;
     
     console.log(`Generated ${points.length} pattern points`);
     return taggedPoints;
@@ -151,33 +161,76 @@ const SpeakerGrille = () => {
     minClearance,
     concentricSpacing,
     centerExclusion,
-    centerHole
+    centerHole,
+    forceStrength
   ]);
 
   const centerPoints = useMemo(() => {
-    console.log('Generating center points...');
-    if (centerExclusion === 0) return [];
+    if (centerExclusion <= 0) return [];
     
-    const points = generateCenterPoints({
-      algorithm: centerAlgorithm,
-      centerRadius: centerExclusion,
-      minDistance: minClearance,
-      holeRadius: holeRadius,
-      bufferRadius: centerExclusion + (2 * holeRadius + minClearance),
-      outerPoints: patternPoints.filter(p => {
-        const distSq = p.x * p.x + p.y * p.y;
-        // Only exclude points that are definitely too far to matter
-        return distSq >= centerExclusion * centerExclusion - (4 * holeRadius * holeRadius);
-      }),
-      centerHole,
-      densityFactor: centerDensity
+    // Get original pattern points that are in the center area
+    const pointsInCenter = patternPoints.filter(p => {
+      const distSq = p.x * p.x + p.y * p.y;
+      return distSq <= centerExclusion * centerExclusion;
     });
-    
-    return points.map(p => ({
-      ...p,
-      source: 'center'
-    }));
-  }, [centerAlgorithm, centerExclusion, holeRadius, minClearance, patternPoints, centerHole, centerDensity]);
+
+    console.log('Center point calculation:', {
+      centerAlgorithm,
+      forceStrength,
+      totalPatternPoints: patternPoints.length,
+      pointsInCenter: pointsInCenter.length,
+      sampleCenterPoints: pointsInCenter.slice(0, 3)
+    });
+
+    if (centerAlgorithm === 'adaptiveForce') {
+      // For adaptive force, we directly manipulate the center points
+      const adaptivePoints = generateCenterPoints({
+        algorithm: centerAlgorithm,
+        centerRadius: centerExclusion,
+        minDistance: minClearance,
+        holeRadius: holeRadius,
+        bufferRadius: centerExclusion + (2 * holeRadius + minClearance),
+        outerPoints: pointsInCenter,  // Send only points that were in center
+        centerHole,
+        densityFactor: centerDensity,
+        forceStrength
+      });
+
+      console.log('Adaptive points returned:', {
+        count: adaptivePoints.length,
+        samplePoints: adaptivePoints.slice(0, 3)
+      });
+
+      return adaptivePoints.map(p => ({
+        ...p,
+        source: 'center'
+      }));
+    } else {
+      // For other algorithms, use points near the center as constraints
+      const pointsNearCenter = patternPoints.filter(p => {
+        const distSq = p.x * p.x + p.y * p.y;
+        return distSq > centerExclusion * centerExclusion && 
+               distSq <= (centerExclusion + 2 * holeRadius) * (centerExclusion + 2 * holeRadius);
+      });
+
+      const points = generateCenterPoints({
+        algorithm: centerAlgorithm,
+        centerRadius: centerExclusion,
+        minDistance: minClearance,
+        holeRadius: holeRadius,
+        bufferRadius: centerExclusion + (2 * holeRadius + minClearance),
+        outerPoints: pointsNearCenter,
+        centerHole,
+        densityFactor: centerDensity
+      });
+
+      return points.map(p => ({
+        ...p,
+        source: 'center'
+      }));
+    }
+  }, [centerAlgorithm, centerExclusion, holeRadius, minClearance, patternPoints, centerHole, centerDensity, forceStrength]);
+
 
   const exportSVG = () => {
     if (!svgRef.current) return;
@@ -251,7 +304,17 @@ const SpeakerGrille = () => {
                 fill={selectedColour}
               />
             )}
-            {[...patternPoints, ...centerPoints].map((point, i) => {
+            {[
+              // For adaptive force, we filter at render time
+              // For other modes, points are already filtered
+              ...(centerAlgorithm === 'adaptiveForce'
+                ? patternPoints.filter(p => {
+                    const distSq = p.x * p.x + p.y * p.y;
+                    return distSq > centerExclusion * centerExclusion;
+                  })
+                : patternPoints),  // These are already filtered for other modes
+              ...centerPoints
+            ].map((point, i) => {
               const distSq = point.x * point.x + point.y * point.y;
               const scaledHoleRadius = getCircleSize(point.x, point.y, holeRadius);
               const isOutsideRadius = distSq > (radius - scaledHoleRadius) * (radius - scaledHoleRadius);
@@ -377,6 +440,7 @@ const SpeakerGrille = () => {
                 onChange={(e) => setCenterAlgorithm(e.target.value as CenterFillAlgorithm)}
                 className="w-full border rounded p-2"
               >
+                <option value="adaptiveForce">Adaptive force directed</option>
                 <option value="force">Force-directed</option>
                 <option value="poisson">Poisson disc</option>
                 <option value="hex">Hex grid</option>
@@ -395,20 +459,39 @@ const SpeakerGrille = () => {
             />
 
             {centerExclusion > 0 && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">
-                  Center Fill Density (<FormattedValue value={centerDensity} precision={2} />)
-                </label>
-                <input
-                  type="range"
-                  min={-1}
-                  max={1}
-                  step={0.05}
-                  value={centerDensity}
-                  onChange={(e) => setCenterDensity(Number(e.target.value))}
-                  className="w-full"
-                />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium">
+                    Center Fill Density (<FormattedValue value={centerDensity} precision={2} />)
+                  </label>
+                  <input
+                    type="range"
+                    min={-1}
+                    max={1}
+                    step={0.05}
+                    value={centerDensity}
+                    onChange={(e) => setCenterDensity(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+
+                {centerAlgorithm === 'adaptiveForce' && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium">
+                      Force Strength (<FormattedValue value={forceStrength} precision={2} />)
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={forceStrength}
+                      onChange={(e) => setForceStrength(Number(e.target.value))}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+              </>
             )}
             <div className="flex items-center space-x-2">
               <input

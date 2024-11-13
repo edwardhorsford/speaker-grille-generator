@@ -1,15 +1,18 @@
 import type { CenterFillConfig, CenterFillAlgorithm } from './types';
 import { ForceFillGenerator } from './forceFill';
+import { AdaptiveForceFillGenerator } from './adaptiveForceFill';
 import { PoissonFillGenerator } from './poissonFill';
 import { HexFillGenerator } from './hexFill';
 import { ConcentricFillGenerator } from './concentricFill';
 
 const forceGenerator = new ForceFillGenerator();
+const adaptiveForceGenerator = new AdaptiveForceFillGenerator();
 const poissonGenerator = new PoissonFillGenerator();
 const hexGenerator = new HexFillGenerator();
 const concentricGenerator = new ConcentricFillGenerator();
 
-export type { CenterFillConfig, CenterFillAlgorithm };
+export type { CenterFillConfig, CenterFillAlgorithm } from './types';
+
 
 export function generateCenterPoints(config: CenterFillConfig & { algorithm: CenterFillAlgorithm }) {
   console.log('generateCenterPoints called with config:', config);
@@ -23,6 +26,11 @@ export function generateCenterPoints(config: CenterFillConfig & { algorithm: Cen
         const forcePoints = forceGenerator.generatePoints(restConfig);
         console.log(`Force generator produced ${forcePoints.length} points`);
         return forcePoints;
+      case 'adaptiveForce':
+        console.log('Using adaptive force generator');
+        const adaptiveForcePoints = adaptiveForceGenerator.generatePoints(restConfig);
+        console.log(`Adaptive force generator produced ${adaptiveForcePoints.length} points`);
+        return adaptiveForcePoints;
       case 'poisson':
         console.log('Using poisson generator');
         const poissonPoints = poissonGenerator.generatePoints(restConfig);
