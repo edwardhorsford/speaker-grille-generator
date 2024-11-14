@@ -1,68 +1,23 @@
-import type { Point } from '../patterns/types';
+// In centerFill/types.ts
 
-type CenterFillAlgorithm = 'adaptiveForce' | 'force' | 'poisson' | 'hex' | 'concentric';
+import { Point } from '../patterns/types';
 
-interface CenterFillConfig {
-  /** Radius of center area to fill */
+export interface CenterFillConfig {
   centerRadius: number;
-  
-  /** Minimum distance between points */
   minDistance: number;
-  
-  /** Radius of each hole */
   holeRadius: number;
-  
-  /** All points in the pattern */
-  patternPoints?: Point[];
-  
-  /** Whether to force a hole in the exact center */
+  patternPoints: Point[];
   centerHole?: boolean;
-  
-  /** Maximum iterations for force-directed */
-  maxIterations?: number;
-  
-  /** Number of attempts for each poisson point */
-  poissonAttempts?: number;
-
-  /** Density factor for center fill (-1 to 1) */
   densityFactor?: number;
-
-  /** Strength of force direction (0 to 1) */
   forceStrength?: number;
+  maxIterations?: number;
+  outerPoints?: Point[];
 }
 
-interface CenterFillGenerator {
+export interface CenterFillGenerator {
   generatePoints(config: CenterFillConfig): Point[];
 }
 
-const checkOverlap = (
-  point: Point,
-  points: Point[],
-  minDistance: number
-): boolean => {
-  return points.some(p => {
-    const dx = point.x - p.x;
-    const dy = point.y - p.y;
-    return (dx * dx + dy * dy) < minDistance * minDistance;
-  });
-};
-
-const isWithinCenter = (
-  point: Point,
-  centerRadius: number
-): boolean => {
-  const distSq = point.x * point.x + point.y * point.y;
-  return distSq <= centerRadius * centerRadius;
-};
-
-export type {
-  CenterFillAlgorithm,
-  CenterFillConfig,
-  CenterFillGenerator,
-  Point
-};
-
-export {
-  checkOverlap,
-  isWithinCenter
-};
+export function isWithinCenter(point: Point, radius: number): boolean {
+  return (point.x * point.x + point.y * point.y) <= radius * radius;
+}

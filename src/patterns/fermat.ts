@@ -33,7 +33,7 @@ export class FermatPattern implements PatternGenerator {
         if (getSpacing) {
             const x = r * Math.cos(theta);
             const y = r * Math.sin(theta);
-            const adjustedSpacing = getSpacing(x, y);
+            const adjustedSpacing = getSpacing(x, y, baseSpacing);
             r = r * Math.max(0.6, Math.min(3.0, adjustedSpacing / baseSpacing));
         }
         

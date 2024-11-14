@@ -4,51 +4,70 @@ export class ConcentricPattern implements PatternGenerator {
   generatePoints(config: ConcentricPatternConfig): Point[] {
     const { 
       radius,
-      holeRadius,
-      minClearance,
       innerRadius = 0,
       centerHole,
-      concentricSpacing
+      ringSpacingFactor = 0,
+      pointSpacingFactor = 0,
+      spacingFactor = 0,
+      getSpacing,
+      holeRadius,
     } = config;
 
     const points: Point[] = [];
     
-    // Start at the minimum radius or center exclusion radius
-    let r = innerRadius;
-    const minimumSpacing = 2 * holeRadius + minClearance;
+    // Base spacing is affected by the global spacing factor
+    const baseSpacing = holeRadius * (3 + spacingFactor);
+    console.log({ringSpacingFactor})
+    
+    // Calculate ring spacing
+    const ringBaseMultiplier = ringSpacingFactor >= 0 
+      ? (1 + ringSpacingFactor * 2)
+      : (1 / (1 + Math.abs(ringSpacingFactor) * 0.5));
+    const ringSpacing = baseSpacing * ringBaseMultiplier;
 
-    // Generate rings until we reach the outer radius
-    while (r <= radius) {
-      // Calculate how many points can fit around this ring
-      const circumference = 2 * Math.PI * r;
-      const pointsInRing = Math.floor(circumference / minimumSpacing);
-      
-      if (pointsInRing > 0) {  // Only create ring if it can fit at least one point
-        // Generate points around the ring
-        for (let i = 0; i < pointsInRing; i++) {
-          const angle = (i * 2 * Math.PI) / pointsInRing;
-          points.push({ 
-            x: r * Math.cos(angle), 
-            y: r * Math.sin(angle) 
-          });
-        }
-      }
+    // Calculate point spacing
+    const pointBaseMultiplier = pointSpacingFactor >= 0
+      ? (1 + pointSpacingFactor * 2)
+      : (1 / (1 + Math.abs(pointSpacingFactor) * 0.5));
+    const pointSpacing = baseSpacing * pointBaseMultiplier;
 
-      // Move to next ring
-      r += concentricSpacing;
+    // Starting radius - account for center hole
+    let currentRadius = Math.max(innerRadius, centerHole ? holeRadius : 0);
+
+    // Add center point if center hole is enabled
+    if (centerHole) {
+        points.push({ x: 0, y: 0 });
+        currentRadius += ringSpacing;
     }
 
-    // Add center point if needed
-    if (centerHole) {
-      points.unshift({ x: 0, y: 0 });
+    // Generate rings
+    while (currentRadius <= radius) {
+        // Get spacing for current radius position
+        const effectivePointSpacing = getSpacing 
+            ? getSpacing(currentRadius, 0, pointSpacing)
+            : pointSpacing;
+
+        const effectiveRingSpacing = getSpacing
+            ? getSpacing(currentRadius, 0, ringSpacing)
+            : ringSpacing;
+
+        // Calculate points in this ring
+        const circumference = 2 * Math.PI * currentRadius;
+        const pointsInRing = Math.max(1, Math.floor(circumference / effectivePointSpacing));
+        
+        // Generate points around the ring
+        const angleStep = (2 * Math.PI) / pointsInRing;
+        for (let i = 0; i < pointsInRing; i++) {
+            const angle = i * angleStep;
+            const x = currentRadius * Math.cos(angle);
+            const y = currentRadius * Math.sin(angle);
+            points.push({ x, y });
+        }
+
+        // Move to next ring
+        currentRadius += effectiveRingSpacing;
     }
 
     return points;
-  }
-
-  static getOptimalSpacing(holeRadius: number, minClearance: number): number {
-    // A good default is slightly more than twice the hole diameter
-    // This ensures holes in adjacent rings don't overlap
-    return (2 * holeRadius + minClearance) * 1.1;
   }
 }

@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { PatternType, BasePatternConfig, Point } from '../patterns/types';
 import { getPatternGenerator, createPatternConfig } from '../patterns/pattern-factory';
-import { generateCenterPoints, CenterFillAlgorithm } from '../centerFill';
+import { generateCenterPoints } from '../centerFill/index';
 import { FormattedValue } from './FormattedValue';
 import { SliderControl } from './SliderControl';
 import { MM_TO_PX, Units, ScaleType } from '../constants';
@@ -13,7 +13,6 @@ const DEFAULT_VALUES_MM = {
   spacing: 6,          // 5mm
   minClearance: 1,     // 1mm
   centerExclusion: 0,  // 0mm
-  concentricSpacing: 8 // 8mm
 };
 
 // Convert to pixels for internal storage
@@ -23,7 +22,6 @@ const DEFAULT_VALUES_PX = {
   spacing: DEFAULT_VALUES_MM.spacing * MM_TO_PX,
   minClearance: DEFAULT_VALUES_MM.minClearance * MM_TO_PX,
   centerExclusion: DEFAULT_VALUES_MM.centerExclusion * MM_TO_PX,
-  concentricSpacing: DEFAULT_VALUES_MM.concentricSpacing * MM_TO_PX
 };
 
 const SpeakerGrille = () => {
@@ -38,12 +36,12 @@ const SpeakerGrille = () => {
   const [minClearance, setMinClearance] = useState(DEFAULT_VALUES_PX.minClearance);
   const [centerExclusion, setCenterExclusion] = useState(DEFAULT_VALUES_PX.centerExclusion);
   const [centerDensity, setCenterDensity] = useState(0);
-  const [concentricSpacing, setConcentricSpacing] = useState(DEFAULT_VALUES_PX.concentricSpacing);
+  const [ringSpacingFactor, setRingSpacingFactor] = useState(0);
+  const [pointSpacingFactor, setPointSpacingFactor] = useState(0);
   const [sizeScaling, setSizeScaling] = useState(0);
   const [scaleType, setScaleType] = useState<ScaleType>('linear');
   const [useStrokes, setUseStrokes] = useState(false);
   const [units, setUnits] = useState<Units>('mm');
-  const [centerAlgorithm, setCenterAlgorithm] = useState<CenterFillAlgorithm>('adaptiveForce');
   const [invertColours, setInvertColours] = useState(false);
   const [selectedColour, setSelectedColour] = useState('#000000');
   const [includeAlignmentMarks, setIncludeAlignmentMarks] = useState(false);
@@ -66,16 +64,13 @@ const SpeakerGrille = () => {
     // Calculate distance from center (0 to 1)
     const distance = Math.sqrt(x * x + y * y) / radius;
     
-    // Double amplification for Fermat pattern
-    const amplifiedScaling = spacingScaling * (pattern === 'fermat' ? 4 : 2);
+    // For concentric pattern, use a more moderate scaling
+    const amplifiedScaling = spacingScaling * (pattern === 'concentric' ? 1 : pattern === 'fermat' ? 4 : 2);
     
     // Ensure we properly return to baseSpacing at the edge
-    // by using a normalized distance that reaches exactly 1
     const normalizedDistance = Math.min(distance, 1);
     
     if (scaleType === 'linear') {
-      // At distance = 0 (center): baseSpacing * (1 + amplifiedScaling)
-      // At distance = 1 (edge): baseSpacing
       return baseSpacing * (1 + amplifiedScaling * (1 - normalizedDistance));
     } else {
       const scaleFactor = Math.exp(amplifiedScaling * (1 - normalizedDistance)) - 1;
@@ -101,7 +96,9 @@ const SpeakerGrille = () => {
       holeRadius,
       minClearance,
       centerHole,
-      getSpacing: (x: number, y: number) => getSpacing(x, y, baseSpacing)
+      centerExclusion,
+      getSpacing,
+      spacingFactor
     };
 
     const config = createPatternConfig(
@@ -110,8 +107,12 @@ const SpeakerGrille = () => {
       divergenceAngle,
       baseSpacing,
       numPoints,
-      concentricSpacing
+      pattern === 'concentric' ? {
+        ringSpacingFactor,
+        pointSpacingFactor
+      } : undefined
     );
+
 
     // Generate initial pattern points
     const generator = getPatternGenerator(pattern);
@@ -124,14 +125,14 @@ const SpeakerGrille = () => {
 
     // Let center fill algorithm handle the pattern
     return generateCenterPoints({
-      algorithm: centerAlgorithm,
       centerRadius: centerExclusion,
       minDistance: minClearance,
       holeRadius: holeRadius,
       patternPoints: patternPoints,
       centerHole,
       densityFactor: centerDensity,
-      forceStrength
+      forceStrength,
+      maxIterations: 150
     });
   }, [
     pattern,
@@ -142,12 +143,12 @@ const SpeakerGrille = () => {
     spacingScaling,
     scaleType,
     minClearance,
-    concentricSpacing,
     centerExclusion,
     centerHole,
-    centerAlgorithm,
     centerDensity,
-    forceStrength
+    forceStrength,
+    ringSpacingFactor,     // Add this
+    pointSpacingFactor     // And this
   ]);
 
   // File operations
@@ -181,7 +182,8 @@ const SpeakerGrille = () => {
     setSpacingFactor(0);
     setMinClearance(DEFAULT_VALUES_PX.minClearance);
     setCenterExclusion(DEFAULT_VALUES_PX.centerExclusion);
-    setConcentricSpacing(DEFAULT_VALUES_PX.concentricSpacing);
+    setRingSpacingFactor(0);
+    setPointSpacingFactor(0);
     setDivergenceAngle(137.5);
     setSizeScaling(0);
     setSpacingScaling(0);
@@ -214,7 +216,7 @@ const SpeakerGrille = () => {
                 fill={selectedColour}
               />
             )}
-            {points.map((point, i) => {
+            {points.map((point: Point, i: number) => {
               const distSq = point.x * point.x + point.y * point.y;
               const scaledHoleRadius = getCircleSize(point.x, point.y, holeRadius);
               const isOutsideRadius = distSq > (radius - scaledHoleRadius) * (radius - scaledHoleRadius);
@@ -274,15 +276,16 @@ const SpeakerGrille = () => {
                 className="w-full border rounded p-2"
               >
                 <option value="phyllotaxis">Phyllotaxis</option>
-                <option value="fermat">Fermat Spiral</option>
-                <option value="concentric">Concentric Rings</option>
+                <option value="fermat">Fermat spiral</option>
+                <option value="concentric">Concentric rings</option>
+                <option value="hex">Hex</option>
               </select>
             </div>
 
-            {pattern !== 'concentric' && (
+            {!['concentric', 'hex'].includes(pattern) && (
               <div className="space-y-2">
                 <label className="block text-sm font-medium">
-                  Divergence Angle (<FormattedValue value={divergenceAngle} units="°" precision={1} />)
+                  Divergence angle (<FormattedValue value={divergenceAngle} units="°" precision={1} />)
                 </label>
                 <input
                   type="range"
@@ -297,80 +300,95 @@ const SpeakerGrille = () => {
             )}
 
             {pattern === 'concentric' && (
-              <SliderControl
-                label="Ring Spacing"
-                value={concentricSpacing}
-                onChange={setConcentricSpacing}
-                units={units}
-                mmRange={[1, 30, 1]}
-                pxRange={[4, 120, 1]}
-                precision={1}
-              />
-            )}
-          </div>
-
-          {/* Center Area Controls */}
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <label className="block text-sm font-medium">Center Fill Algorithm</label>
-              <select
-                value={centerAlgorithm}
-                onChange={(e) => setCenterAlgorithm(e.target.value as CenterFillAlgorithm)}
-                className="w-full border rounded p-2"
-              >
-                <option value="adaptiveForce">Adaptive force directed</option>
-                <option value="force">Force-directed</option>
-                <option value="poisson">Poisson disc</option>
-                <option value="hex">Hex grid</option>
-                <option value="concentric">Concentric rings</option>
-              </select>
-            </div>
-
-            <SliderControl
-              label="Center Area Size"
-              value={centerExclusion}
-              onChange={setCenterExclusion}
-              units={units}
-              mmRange={[0, 200, 5]}
-              pxRange={[0, 800, 5]}
-              precision={1}
-            />
-
-            {centerExclusion > 0 && (
               <>
                 <div className="space-y-2">
                   <label className="block text-sm font-medium">
-                    Center Fill Density (<FormattedValue value={centerDensity} precision={2} />)
+                    Ring Spacing (<FormattedValue value={ringSpacingFactor} precision={2} />)
                   </label>
                   <input
                     type="range"
                     min={-1}
                     max={1}
                     step={0.05}
-                    value={centerDensity}
-                    onChange={(e) => setCenterDensity(Number(e.target.value))}
+                    value={ringSpacingFactor}
+                    onChange={(e) => setRingSpacingFactor(Number(e.target.value))}
                     className="w-full"
                   />
                 </div>
 
-                {centerAlgorithm === 'adaptiveForce' && (
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium">
-                      Force Strength (<FormattedValue value={forceStrength} precision={2} />)
-                    </label>
-                    <input
-                      type="range"
-                      min={0}
-                      max={2}  // Changed from 1 to 2
-                      step={0.05}
-                      value={forceStrength}
-                      onChange={(e) => setForceStrength(Number(e.target.value))}
-                      className="w-full"
-                    />
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium">
+                    Point Spacing (<FormattedValue value={pointSpacingFactor} precision={2} />)
+                  </label>
+                  <input
+                    type="range"
+                    min={-1}
+                    max={1}
+                    step={0.05}
+                    value={pointSpacingFactor}
+                    onChange={(e) => setPointSpacingFactor(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
               </>
             )}
+          </div>
+
+          
+          <div className="space-y-6">
+
+            {/* Center Area Controls */}
+            {!['concentric', 'hex'].includes(pattern) && (
+              <div className="space-y-6">
+
+                <SliderControl
+                  label="Center Area Size"
+                  value={centerExclusion}
+                  onChange={setCenterExclusion}
+                  units={units}
+                  mmRange={[0, 200, 5]}
+                  pxRange={[0, 800, 5]}
+                  precision={1}
+                />
+
+                {centerExclusion > 0 && (
+                  <>
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium">
+                        Center Fill Density (<FormattedValue value={centerDensity} precision={2} />)
+                      </label>
+                      <input
+                        type="range"
+                        min={-1}
+                        max={1}
+                        step={0.05}
+                        value={centerDensity}
+                        onChange={(e) => setCenterDensity(Number(e.target.value))}
+                        className="w-full"
+                      />
+                    </div>
+
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium">
+                        Force Strength (<FormattedValue value={forceStrength} precision={2} />)
+                      </label>
+                      <input
+                        type="range"
+                        min={0}
+                        max={2}  // Changed from 1 to 2
+                        step={0.05}
+                        value={forceStrength}
+                        onChange={(e) => setForceStrength(Number(e.target.value))}
+                        className="w-full"
+                      />
+                    </div>
+    
+                  </>
+                )}
+              </div>
+            )}
+            
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
@@ -383,6 +401,7 @@ const SpeakerGrille = () => {
                 Include center hole
               </label>
             </div>
+
           </div>
 
           {/* General Controls */}

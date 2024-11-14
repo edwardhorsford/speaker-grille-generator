@@ -23,7 +23,7 @@ export class PhyllotaxisPattern implements PatternGenerator {
       if (getSpacing) {
         const x = r * Math.cos(angle);
         const y = r * Math.sin(angle);
-        const adjustedSpacing = getSpacing(x, y);
+        const adjustedSpacing = getSpacing(x, y, baseSpacing);
         const spacingRatio = adjustedSpacing / baseSpacing - 1;
         const adjustmentFactor = spacingRatio < 0 ? 1.0 : 0.2;
         r = r * (1 + adjustmentFactor * spacingRatio);
